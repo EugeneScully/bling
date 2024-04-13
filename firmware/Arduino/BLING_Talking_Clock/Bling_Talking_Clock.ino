@@ -12,6 +12,7 @@
 #include "secret.h"
 #include "display.h"
 #include "utc_offset.h"
+#include "alarm.h"
 
 #define LED_PIN     18
 #define I2S_DOUT    3
@@ -36,6 +37,7 @@ const char* ntpServer = "pool.ntp.org";
 unsigned long nextDisplayUpdate = 0;
 modes mode = RUNNING;
 bool ready = false;
+int alarmTime = -1;
 
 Audio audio;
 
@@ -175,6 +177,9 @@ void setup()
     // Writes the new date time to RTC, good or bad
     rtc.synchronize();
   }
+
+  // Set the alarm
+  alarmTime = GetAlarmTime();
 
   // Init I2S Amplifier
   audio.setPinout(I2S_BCLK, I2S_LRC, I2S_DOUT, -1);
