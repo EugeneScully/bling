@@ -1,7 +1,14 @@
 #include <HTTPClient.h>
 
-// Returns number of seconds after midnight for the alarm
-int GetAlarmTime()
+// Track if the alarm is currently active
+bool isAlarmSet = false;
+
+/*
+ * Fetches the number of seconds after midnight for each day of the week.
+ * Returns true if successful.
+ * alarmTimes: Entries for the alarm time for each day in minutes. Should have length of 7.
+*/
+bool GetAlarmTimes(int *alarmTimes)
 {
   HTTPClient http;
   int httpCode = -1;
@@ -11,39 +18,56 @@ int GetAlarmTime()
   httpCode = http.GET();  //send GET request
   if (httpCode != 200) {
     http.end();
-    return -1;
+    return false;
   } else {
     const char *s;
     int i;
     String payload = http.getString();
     http.end();
     s = payload.c_str();
-    // Get the raw HTTP response text (+HHMM)
-    // and convert the time zone offset (HHMM) into seconds
 
-    //  Serial.print("TZ offset ");
-    //  Serial.println(s);
-    i = ((s[0] - '0') * 10) + (s[1] - '0'); // hour
-    i *= 60;
-    i += ((s[3] - '0') * 10) + (s[4] - '0'); // minute
-    
-    return i; // return minutes
+    // Response is in the format: 
+    // --:--,18:30,18:30,18:30,18:30,18:30,--:--,
+    // Copy to the 'alarmTimes' array
+
+    // Split the entries
+    char *token = strtok((char *)s, ",");
+    i = 0;
+    while (token != NULL) {
+      if (strcmp(token, "--:--") == 0) {
+        alarmTimes[i] = -1;
+      } else {
+        // Convert to minutes
+        int hours = atoi(strtok(token, ":"));
+        int minutes = atoi(strtok(NULL, ":"));
+        alarmTimes[i] = hours * 60 + minutes;
+      }
+    }
+    return true;
   } // if successfully connected
-  return -1;
+  return false;
 }
 
-void CheckIfAlarm(int alarmTime) {
-  int alarmTimeHours = alarmTime / 60; // get hours
-  if (rtc.getHours() != alarmTimeHours) {
-    return; // check if hours match
-  } 
+/*
+* Is it the alarm time?
+*/
+bool CheckIfAlarm(int alarmTime, int currentTime) {
 
-  int alarmTimeMinutes = alarmTime % 60; // get minutes
-  if (rtc.getMinutes() != alarmTimeMinutes) {
-    return; // check if minutes match
+  if (alarmTime == -1) { // if no alarm set for today
+    isAlarmSet = false;
+    return false;
   }
 
-  // If hours and minutes match, sound alarm
-  Serial.println("Alarm time reached!");
-  // TODO: Sound alarm
+  if (currentTime != alarmTime) {
+    isAlarmSet = false;
+    return false;
+  }
+
+  if (!isAlarmSet) {
+    isAlarmSet = true;
+    Serial.println("Alarm set!");
+    return true;
+  }
+
+  return false;
 }

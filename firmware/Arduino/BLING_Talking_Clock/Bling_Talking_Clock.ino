@@ -12,7 +12,9 @@
 #include "secret.h"
 #include "display.h"
 #include "utc_offset.h"
+
 #include "alarm.h"
+#include "school_day.h"
 
 #define LED_PIN     18
 #define I2S_DOUT    3
@@ -37,7 +39,9 @@ const char* ntpServer = "pool.ntp.org";
 unsigned long nextDisplayUpdate = 0;
 modes mode = RUNNING;
 bool ready = false;
-int alarmTime = -1;
+int alarmTimes[7];
+DateRange schoolDays[20];
+int schoolDaysCount = -1;
 
 Audio audio;
 
@@ -178,8 +182,38 @@ void setup()
     rtc.synchronize();
   }
 
-  // Set the alarm
-  alarmTime = GetAlarmTime();
+  // Fetch the alarm
+  if (GetAlarmTimes(alarmTimes)) {
+    Serial.print("Alarms loaded : ");
+    for (int i = 0; i < 7; i++) {
+      Serial.print(alarmTimes[i]);
+      Serial.print(",");
+    }
+    Serial.println();
+  }
+  else {
+    Serial.println("Failed to load alarms");
+  }
+
+  // Fetch the school dates
+  uint8_t year = rtc.getCurrentDateTimeComponent(DATETIME_YEAR);
+  schoolDaysCount = GetSchoolDays(schoolDays, year);
+  if (schoolDaysCount > 0) {
+    Serial.print("School days loaded : ");
+    for (int i = 0; i < schoolDaysCount; i++) {
+      Serial.print(schoolDays[i].startDay);
+      Serial.print("/");
+      Serial.print(schoolDays[i].startMonth);
+      Serial.print("-");
+      Serial.print(schoolDays[i].endDay);
+      Serial.print("/");
+      Serial.print(schoolDays[i].endMonth);
+      Serial.print(",");
+    }
+  }
+  else {
+    Serial.println("Failed to load school days");
+  }
 
   // Init I2S Amplifier
   audio.setPinout(I2S_BCLK, I2S_LRC, I2S_DOUT, -1);
@@ -207,6 +241,16 @@ void loop()
   Button_B.tick();
   Button_C.tick();
   Button_D.tick();
+
+  // Check if it's time to wake up
+  uint8_t hour = rtc.getCurrentDateTimeComponent(DATETIME_HOUR);
+  uint8_t mins = rtc.getCurrentDateTimeComponent(DATETIME_MINUTE);
+  uint8_t dayOfWeek = rtc.getCurrentDateTimeComponent(DATETIME_DAY_OF_WEEK);
+  int currentTime =hour * 60 + mins; // in minutes
+  int alarmTime = alarmTimes[dayOfWeek];
+  if (CheckIfAlarm(alarmTime, currentTime)) {
+    Speak("Wake up");
+  }
 
   // Scrolling text overrides any other display
   if (ScrollText(matrix))
